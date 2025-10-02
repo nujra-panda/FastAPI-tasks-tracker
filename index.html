@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Todo List - Full Features</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        input, select {
+            margin: 5px;
+            padding: 5px;
+        }
+
+        button {
+            margin: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+        }
+
+        button:hover {
+            opacity: 0.8;
+        }
+
+        ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        li {
+            margin: 5px 0;
+        }
+
+        h2 {
+            margin-top: 30px;
+        }
+
+        /* Notification styling */
+        #notification {
+            display:none; 
+            position:fixed; 
+            top:10px; 
+            right:10px; 
+            background-color:#4CAF50; 
+            color:white; 
+            padding:10px 20px; 
+            border-radius:5px;
+            box-shadow:0 2px 5px rgba(0,0,0,0.3);
+            z-index:1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="notification"></div>
+
+    <h1>Todo List</h1>
+
+    <!-- Create Task -->
+    <h2>Create Task</h2>
+    <input type="number" id="taskId" placeholder="ID">
+    <input type="text" id="taskTitle" placeholder="Title">
+    <input type="text" id="taskDesc" placeholder="Description">
+    <input type="date" id="taskDue" placeholder="Due Date">
+    <select id="taskPriority">
+        <option value="Low">Low</option>
+        <option value="Medium" selected>Medium</option>
+        <option value="High">High</option>
+    </select>
+    <button onclick="createTask()">Add Task</button>
+
+    <!-- Update Task -->
+    <h2>Update Task</h2>
+    <input type="number" id="updateId" placeholder="Task ID">
+    <input type="text" id="updateTitle" placeholder="New Title">
+    <input type="text" id="updateDesc" placeholder="New Description">
+    <input type="date" id="updateDue" placeholder="New Due Date">
+    <select id="updatePriority">
+        <option value="Low">Low</option>
+        <option value="Medium" selected>Medium</option>
+        <option value="High">High</option>
+    </select>
+    <label>
+        Completed:
+        <input type="checkbox" id="updateCompleted">
+    </label>
+    <button onclick="updateTask()">Update Task</button>
+
+    <!-- Task Lists -->
+    <h2>Incomplete Tasks</h2>
+    <ul id="taskList"></ul>
+
+    <h2>
+        Completed Tasks
+        <button onclick="toggleCompleted()">Show/Hide</button>
+    </h2>
+    <ul id="completedList" style="display:none; background-color:#f0f0f0; padding:10px;"></ul>
+
+    <script>
+        const baseURL = "http://127.0.0.1:8000/tasks";
+
+        // Show notification
+        function showNotification(message, color="#4CAF50") {
+            const notif = document.getElementById("notification");
+            notif.textContent = message;
+            notif.style.backgroundColor = color;
+            notif.style.display = "block";
+            setTimeout(() => {
+                notif.style.display = "none";
+            }, 2000);
+        }
+
+        // Toggle completed list visibility
+        function toggleCompleted() {
+            const completed = document.getElementById("completedList");
+            completed.style.display = completed.style.display === "none" ? "block" : "none";
+        }
+
+        // Get all tasks and separate completed vs incomplete
+        async function getTasks() {
+            const res = await fetch(baseURL);
+            const data = await res.json();
+
+            const list = document.getElementById("taskList");
+            const completedList = document.getElementById("completedList");
+
+            list.innerHTML = "";
+            completedList.innerHTML = "";
+
+            data.forEach(task => {
+                const li = document.createElement("li");
+                const dueText = task.due ? ` | Due: ${task.due}` : "";
+                const priorityText = task.priority ? ` | Priority: ${task.priority}` : "";
+                li.textContent = `${task.id}: ${task.title} - ${task.description}${dueText}${priorityText}`;
+
+                // Color-code by priority (for incomplete tasks)
+                if (!task.completed) {
+                    if (task.priority === "High") li.style.color = "red";
+                    else if (task.priority === "Medium") li.style.color = "orange";
+                    else li.style.color = "green";
+                }
+
+                // Highlight overdue tasks (overrides priority color)
+                if (task.due && !task.completed) {
+                    const today = new Date().toISOString().split('T')[0];
+                    if (task.due < today) {
+                        li.style.color = "darkred";
+                        li.style.fontWeight = "bold";
+                    }
+                }
+
+                // Complete/Incomplete toggle button
+                const compBtn = document.createElement("button");
+                compBtn.textContent = task.completed ? "Mark Incomplete" : "Mark Complete";
+                compBtn.onclick = async () => {
+                    await fetch(`${baseURL}/${task.id}`, {
+                        method: "PUT",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({
+                            id: task.id,
+                            title: task.title,
+                            description: task.description,
+                            completed: !task.completed,
+                            due: task.due,
+                            priority: task.priority
+                        })
+                    });
+                    getTasks();
+                    showNotification(task.completed ? "Marked Incomplete ✏️" : "Marked Complete ✅", "#2196F3");
+                };
+                li.appendChild(compBtn);
+
+                // Delete button
+                const delBtn = document.createElement("button");
+                delBtn.textContent = "Delete";
+                delBtn.onclick = async () => {
+                    await fetch(`${baseURL}/${task.id}`, { method: "DELETE" });
+                    getTasks();
+                    showNotification("Task Deleted ❌", "#f44336");
+                };
+                li.appendChild(delBtn);
+
+                // Append to correct list
+                if (task.completed) {
+                    completedList.appendChild(li);
+                } else {
+                    list.appendChild(li);
+                }
+            });
+        }
+
+        // Create task
+        async function createTask() {
+            const id = document.getElementById("taskId").value;
+            const title = document.getElementById("taskTitle").value;
+            const desc = document.getElementById("taskDesc").value;
+            const dueDate = document.getElementById("taskDue").value;
+            const priority = document.getElementById("taskPriority").value;
+
+            if(!id || !title) {
+                alert("ID and Title are required!");
+                return;
+            }
+
+            await fetch(baseURL, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    id: parseInt(id),
+                    title: title,
+                    description: desc,
+                    completed: false,
+                    due: dueDate,
+                    priority: priority
+                })
+            });
+
+            getTasks();
+            showNotification("Task Added ✅");
+        }
+
+        // Update task
+        async function updateTask() {
+            const id = document.getElementById("updateId").value;
+            const title = document.getElementById("updateTitle").value;
+            const desc = document.getElementById("updateDesc").value;
+            const dueDate = document.getElementById("updateDue").value;
+            const priority = document.getElementById("updatePriority").value;
+            const completed = document.getElementById("updateCompleted").checked;
+
+            if(!id) {
+                alert("Task ID is required to update!");
+                return;
+            }
+
+            await fetch(`${baseURL}/${id}`, {
+                method: "PUT",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    id: parseInt(id),
+                    title: title,
+                    description: desc,
+                    completed: completed,
+                    due: dueDate,
+                    priority: priority
+                })
+            });
+
+            getTasks();
+            showNotification("Task Updated ✏️", "#2196F3");
+        }
+
+        // Delete task
+        async function deleteTask(id) {
+            await fetch(`${baseURL}/${id}`, { method: "DELETE" });
+            getTasks();
+            showNotification("Task Deleted ❌", "#f44336");
+        }
+
+        // Load tasks initially
+        getTasks();
+    </script>
+</body>
+</html>
